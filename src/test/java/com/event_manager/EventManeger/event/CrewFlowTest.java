@@ -66,10 +66,40 @@ class CrewFlowTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].id").value(eventId));
 
+		register("9744444444", "CONTRIBUTOR");
+		long otherContributorId = currentUserId(login("9744444444"));
+		MvcResult otherEventResult = mockMvc.perform(post("/api/organizer/events")
+						.header("Authorization", "Bearer " + organizerToken)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "title": "Other Contributor Event",
+								  "description": "Different contributor tagged",
+								  "location": "Pune",
+								  "taggedContributorIds": [%s]
+								}
+								""".formatted(otherContributorId)))
+				.andExpect(status().isCreated())
+				.andReturn();
+		long otherEventId = jsonMapper.readTree(otherEventResult.getResponse().getContentAsString()).get("id").asLong();
+		mockMvc.perform(post("/api/admin/events/" + otherEventId + "/approve")
+						.header("Authorization", "Bearer " + adminToken))
+				.andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/crew/events")
+						.header("Authorization", "Bearer " + crewToken))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].id").value(eventId));
+
 		mockMvc.perform(post("/api/crew/events/" + eventId + "/applications")
 						.header("Authorization", "Bearer " + crewToken))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.myCrewApplication.status").value("PENDING"));
+
+		mockMvc.perform(post("/api/crew/events/" + otherEventId + "/applications")
+						.header("Authorization", "Bearer " + crewToken))
+				.andExpect(status().isForbidden());
 
 		MvcResult pendingResult = mockMvc.perform(get("/api/contributor/crew-applications")
 						.header("Authorization", "Bearer " + contributorToken))

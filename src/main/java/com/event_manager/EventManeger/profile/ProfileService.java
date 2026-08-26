@@ -42,6 +42,7 @@ public class ProfileService {
 		user.setCity(blankToNull(request.city()));
 		user.setBio(blankToNull(request.bio()));
 		user.setOrganization(blankToNull(request.organization()));
+		// Only change affiliation when explicitly provided — a city/profile patch must not clear it.
 		if (user.getRoles().contains(Role.CREW) && request.affiliatedContributorId() != null) {
 			user.setAffiliatedContributor(userRepository.findByIdAndRole(request.affiliatedContributorId(), Role.CONTRIBUTOR)
 					.orElseThrow(() -> new NotFoundException("Contributor not found")));

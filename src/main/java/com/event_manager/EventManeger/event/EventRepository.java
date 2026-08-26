@@ -21,34 +21,35 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 			where e.status = :status
 			  and (
 			    lower(e.location) = lower(:location)
-			    or tagged = :contributor
+			    or tagged.id = :contributorId
 			  )
 			order by e.createdAt desc
 			""")
 	List<Event> findVisibleToContributor(
 			@Param("status") EventStatus status,
 			@Param("location") String location,
-			@Param("contributor") User contributor);
+			@Param("contributorId") Long contributorId);
 
 	@Query("""
 			select distinct e from Event e
 			join e.taggedContributors tagged
-			where e.status = :status and tagged = :contributor
+			where e.status = :status and tagged.id = :contributorId
 			order by e.createdAt desc
 			""")
 	List<Event> findApprovedTaggedForContributor(
 			@Param("status") EventStatus status,
-			@Param("contributor") User contributor);
+			@Param("contributorId") Long contributorId);
 
 	Optional<Event> findByIdAndOrganizer(Long id, User organizer);
 
 	@Query("""
-			select e from Event e
+			select distinct e from Event e
+			join e.taggedContributors tagged
 			where e.status in :statuses
-			  and lower(e.location) = lower(:location)
+			  and tagged.id = :contributorId
 			order by e.createdAt desc
 			""")
-	List<Event> findByLocationAndStatuses(
+	List<Event> findTaggedForContributorWithStatuses(
 			@Param("statuses") List<EventStatus> statuses,
-			@Param("location") String location);
+			@Param("contributorId") Long contributorId);
 }

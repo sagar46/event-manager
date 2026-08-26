@@ -19,6 +19,15 @@ public class EventMapper {
 			List<EventApplication> applications,
 			List<CrewApplication> crewApplications,
 			User viewer) {
+		return toResponse(event, applications, crewApplications, viewer, false);
+	}
+
+	public EventResponse toResponse(
+			Event event,
+			List<EventApplication> applications,
+			List<CrewApplication> crewApplications,
+			User viewer,
+			boolean hasJobApplication) {
 		ApplicationResponse myApplication = null;
 		CrewApplicationResponse myCrewApplication = null;
 		boolean tagged = false;
@@ -44,6 +53,7 @@ public class EventMapper {
 		boolean includeContributorApplications = viewer != null && event.getOrganizer().getId().equals(viewer.getId());
 		boolean includeCrewApplications = includeContributorApplications
 				|| (viewer != null && viewer.getRoles().contains(Role.CONTRIBUTOR));
+		boolean hasApplied = myCrewApplication != null || hasJobApplication;
 
 		return new EventResponse(
 				event.getId(),
@@ -51,6 +61,15 @@ public class EventMapper {
 				event.getDescription(),
 				event.getLocation(),
 				event.getStartsAt(),
+				event.getEndsAt(),
+				event.getCategory() != null ? event.getCategory().getId() : null,
+				event.getCategory() != null ? event.getCategory().getName() : null,
+				event.getEventType() != null ? event.getEventType().getId() : null,
+				event.getEventType() != null ? event.getEventType().getName() : null,
+				event.getFeedbackForm() != null ? event.getFeedbackForm().getId() : null,
+				event.getCheckInGraceMinutes(),
+				event.getCheckInWindowMinutesBefore(),
+				event.isRequireLocationForCheckIn(),
 				event.getStatus(),
 				UserSummary.from(event.getOrganizer()),
 				event.getTaggedContributors().stream().map(UserSummary::from).toList(),
@@ -59,6 +78,7 @@ public class EventMapper {
 				includeCrewApplications ? crewApplications.stream().map(this::toCrewApplication).toList() : List.of(),
 				myCrewApplication,
 				tagged,
+				hasApplied,
 				event.getCreatedAt());
 	}
 
@@ -72,6 +92,15 @@ public class EventMapper {
 				event.getDescription(),
 				event.getLocation(),
 				event.getStartsAt(),
+				event.getEndsAt(),
+				event.getCategory() != null ? event.getCategory().getId() : null,
+				event.getCategory() != null ? event.getCategory().getName() : null,
+				event.getEventType() != null ? event.getEventType().getId() : null,
+				event.getEventType() != null ? event.getEventType().getName() : null,
+				event.getFeedbackForm() != null ? event.getFeedbackForm().getId() : null,
+				event.getCheckInGraceMinutes(),
+				event.getCheckInWindowMinutesBefore(),
+				event.isRequireLocationForCheckIn(),
 				event.getStatus(),
 				UserSummary.from(event.getOrganizer()),
 				event.getTaggedContributors().stream().map(UserSummary::from).toList(),
@@ -79,6 +108,7 @@ public class EventMapper {
 				null,
 				crewApplications.stream().map(this::toCrewApplication).toList(),
 				null,
+				false,
 				false,
 				event.getCreatedAt());
 	}

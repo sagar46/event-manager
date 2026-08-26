@@ -22,4 +22,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
 	@Query("select u from User u join u.roles r where u.id = :id and r = :role")
 	Optional<User> findByIdAndRole(@Param("id") Long id, @Param("role") Role role);
+
+	List<User> findByAffiliatedContributorOrderByFullNameAsc(User contributor);
 }

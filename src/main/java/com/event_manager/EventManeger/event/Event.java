@@ -4,6 +4,9 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.event_manager.EventManeger.catalog.EventCategory;
+import com.event_manager.EventManeger.catalog.EventType;
+import com.event_manager.EventManeger.form.Form;
 import com.event_manager.EventManeger.user.User;
 
 import jakarta.persistence.Column;
@@ -46,6 +49,32 @@ public class Event {
 	private String location;
 
 	private Instant startsAt;
+
+	private Instant endsAt;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "category_id")
+	private EventCategory category;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "event_type_id")
+	private EventType eventType;
+
+	/** Optional default feedback/survey form for this event (e.g. sampling). */
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "feedback_form_id")
+	private Form feedbackForm;
+
+	/** Minutes after job/event start still counted as PRESENT before LATE. */
+	@Column(nullable = false)
+	private int checkInGraceMinutes = 15;
+
+	/** How many minutes before start self/QR check-in is allowed. */
+	@Column(nullable = false)
+	private int checkInWindowMinutesBefore = 60;
+
+	@Column(nullable = false)
+	private boolean requireLocationForCheckIn = false;
 
 	@ManyToOne(fetch = FetchType.LAZY, optional = false)
 	@JoinColumn(name = "organizer_id", nullable = false)

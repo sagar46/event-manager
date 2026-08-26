@@ -11,16 +11,23 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.event_manager.EventManeger.catalog.EventCategory;
+import com.event_manager.EventManeger.catalog.EventCategoryRepository;
+import com.event_manager.EventManeger.catalog.EventType;
+import com.event_manager.EventManeger.catalog.EventTypeRepository;
 import com.event_manager.EventManeger.common.ConflictException;
 import com.event_manager.EventManeger.common.ForbiddenActionException;
 import com.event_manager.EventManeger.common.NotFoundException;
 import com.event_manager.EventManeger.event.dto.CreateEventRequest;
 import com.event_manager.EventManeger.event.dto.CrewApplicationResponse;
 import com.event_manager.EventManeger.event.dto.EventResponse;
+import com.event_manager.EventManeger.form.Form;
+import com.event_manager.EventManeger.form.FormRepository;
 import com.event_manager.EventManeger.user.Role;
 import com.event_manager.EventManeger.user.User;
 import com.event_manager.EventManeger.user.UserRepository;
 import com.event_manager.EventManeger.user.UserSummary;
+import com.event_manager.EventManeger.workforce.JobApplicationRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -35,6 +42,10 @@ public class EventService {
 	private final CrewApplicationRepository crewApplicationRepository;
 	private final UserRepository userRepository;
 	private final EventMapper eventMapper;
+	private final EventCategoryRepository categoryRepository;
+	private final EventTypeRepository typeRepository;
+	private final FormRepository formRepository;
+	private final JobApplicationRepository jobApplicationRepository;
 
 	@Transactional
 	public EventResponse create(User organizer, CreateEventRequest request) {
@@ -43,8 +54,40 @@ public class EventService {
 		event.setDescription(blankToNull(request.description()));
 		event.setLocation(request.location().trim());
 		event.setStartsAt(request.startsAt());
+		event.setEndsAt(request.endsAt());
 		event.setOrganizer(organizer);
 		event.setStatus(EventStatus.PENDING_APPROVAL);
+
+		if (request.categoryId() != null) {
+			EventCategory category = categoryRepository.findById(request.categoryId())
+					.orElseThrow(() -> new NotFoundException("Event category not found"));
+			event.setCategory(category);
+		}
+		if (request.eventTypeId() != null) {
+			EventType type = typeRepository.findById(request.eventTypeId())
+					.orElseThrow(() -> new NotFoundException("Event type not found"));
+			if (event.getCategory() != null && !type.getCategory().getId().equals(event.getCategory().getId())) {
+				throw new ConflictException("Event type does not belong to the selected category");
+			}
+			event.setEventType(type);
+			if (event.getCategory() == null) {
+				event.setCategory(type.getCategory());
+			}
+		}
+		if (request.feedbackFormId() != null) {
+			Form form = formRepository.findById(request.feedbackFormId())
+					.orElseThrow(() -> new NotFoundException("Feedback form not found"));
+			event.setFeedbackForm(form);
+		}
+		if (request.checkInGraceMinutes() != null) {
+			event.setCheckInGraceMinutes(request.checkInGraceMinutes());
+		}
+		if (request.checkInWindowMinutesBefore() != null) {
+			event.setCheckInWindowMinutesBefore(request.checkInWindowMinutesBefore());
+		}
+		if (request.requireLocationForCheckIn() != null) {
+			event.setRequireLocationForCheckIn(request.requireLocationForCheckIn());
+		}
 
 		if (request.taggedContributorIds() != null) {
 			for (Long contributorId : request.taggedContributorIds()) {
@@ -130,12 +173,12 @@ public class EventService {
 	public List<EventResponse> listForContributor(User contributor) {
 		List<Event> events;
 		if (contributor.getCity() == null || contributor.getCity().isBlank()) {
-			events = eventRepository.findApprovedTaggedForContributor(EventStatus.APPROVED, contributor);
+			events = eventRepository.findApprovedTaggedForContributor(EventStatus.APPROVED, contributor.getId());
 		} else {
 			events = eventRepository.findVisibleToContributor(
 					EventStatus.APPROVED,
 					contributor.getCity().trim(),
-					contributor);
+					contributor.getId());
 		}
 
 		return uniqueEvents(events).stream()
@@ -172,12 +215,20 @@ public class EventService {
 	@Transactional(readOnly = true)
 	public List<EventResponse> listForCrew(User crewUser) {
 		User crew = reload(crewUser);
-		if (crew.getCity() == null || crew.getCity().isBlank()) {
+		User affiliatedContributor = crew.getAffiliatedContributor();
+		if (affiliatedContributor == null) {
 			return List.of();
 		}
-		return eventRepository.findByLocationAndStatuses(CREW_VISIBLE_STATUSES, crew.getCity().trim()).stream()
-				.filter(this::hasActiveContributors)
-				.map(event -> eventMapper.toResponse(event, applications(event), crewApplications(event), crew))
+		Set<Long> jobAppliedEventIds = Set.copyOf(jobApplicationRepository.findEventIdsByCrew(crew));
+		return eventRepository
+				.findTaggedForContributorWithStatuses(CREW_VISIBLE_STATUSES, affiliatedContributor.getId())
+				.stream()
+				.map(event -> eventMapper.toResponse(
+						event,
+						applications(event),
+						crewApplications(event),
+						crew,
+						jobAppliedEventIds.contains(event.getId())))
 				.toList();
 	}
 
@@ -189,12 +240,9 @@ public class EventService {
 		if (!event.isOpenForCrew()) {
 			throw new ForbiddenActionException("This event is not open to crew yet");
 		}
-		if (!canCrewSeeEvent(crew, event)) {
-			throw new ForbiddenActionException("This event is not available in your location");
-		}
 		User affiliatedContributor = requireAffiliatedContributor(crew);
-		if (!isContributorActiveOnEvent(event, affiliatedContributor)) {
-			throw new ForbiddenActionException("Your contributor is not part of this event yet");
+		if (!canCrewSeeEvent(crew, event)) {
+			throw new ForbiddenActionException("Your contributor is not tagged on this event");
 		}
 		if (crewApplicationRepository.existsByEventAndCrew(event, crew)) {
 			throw new ConflictException("You have already applied to this event");
@@ -207,7 +255,13 @@ public class EventService {
 		application.setStatus(ApplicationStatus.PENDING);
 		crewApplicationRepository.save(application);
 
-		return eventMapper.toResponse(event, applications(event), crewApplications(event), crew);
+		boolean hasJobApplication = !jobApplicationRepository.findByCrewAndEventId(crew, eventId).isEmpty();
+		return eventMapper.toResponse(
+				event,
+				applications(event),
+				crewApplications(event),
+				crew,
+				hasJobApplication);
 	}
 
 	@Transactional(readOnly = true)
@@ -248,24 +302,18 @@ public class EventService {
 	}
 
 	private boolean canCrewSeeEvent(User crew, Event event) {
-		if (crew.getCity() == null || crew.getCity().isBlank()) {
+		User affiliatedContributor = crew.getAffiliatedContributor();
+		if (affiliatedContributor == null) {
 			return false;
 		}
-		return event.getLocation().equalsIgnoreCase(crew.getCity().trim());
+		return event.isTagged(affiliatedContributor);
 	}
 
 	private User requireAffiliatedContributor(User crew) {
 		if (crew.getAffiliatedContributor() == null) {
-			throw new ForbiddenActionException("Choose a contributor during signup before applying to events");
+			throw new ForbiddenActionException("Choose a contributor on your profile before applying to events");
 		}
 		return crew.getAffiliatedContributor();
-	}
-
-	private boolean hasActiveContributors(Event event) {
-		if (!event.getTaggedContributors().isEmpty()) {
-			return true;
-		}
-		return applications(event).stream().anyMatch(application -> application.getStatus() == ApplicationStatus.APPROVED);
 	}
 
 	private boolean isContributorActiveOnEvent(Event event, User contributor) {

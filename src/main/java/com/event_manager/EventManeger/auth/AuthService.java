@@ -112,16 +112,13 @@ public class AuthService {
 		user.setPhone(phone);
 		user.setEnabled(true);
 		user.setRoles(Set.of(role));
-		if (role == Role.CREW) {
+		if (role == Role.CREW && affiliatedContributorId != null) {
 			user.setAffiliatedContributor(requireContributor(affiliatedContributorId));
 		}
 		return userRepository.save(user);
 	}
 
 	private User requireContributor(Long contributorId) {
-		if (contributorId == null) {
-			throw new InvalidPersonaException("Crew members must choose a contributor during signup");
-		}
 		return userRepository.findByIdAndRole(contributorId, Role.CONTRIBUTOR)
 				.orElseThrow(() -> new NotFoundException("Contributor not found"));
 	}

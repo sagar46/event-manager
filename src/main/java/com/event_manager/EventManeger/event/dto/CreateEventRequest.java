@@ -19,6 +19,13 @@ public record CreateEventRequest(
 		String location,
 
 		Instant startsAt,
+		Instant endsAt,
+		Long categoryId,
+		Long eventTypeId,
+		Long feedbackFormId,
+		Integer checkInGraceMinutes,
+		Integer checkInWindowMinutesBefore,
+		Boolean requireLocationForCheckIn,
 
 		List<Long> taggedContributorIds) {
 }

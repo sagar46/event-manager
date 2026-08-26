@@ -12,6 +12,15 @@ public record EventResponse(
 		String description,
 		String location,
 		Instant startsAt,
+		Instant endsAt,
+		Long categoryId,
+		String categoryName,
+		Long eventTypeId,
+		String eventTypeName,
+		Long feedbackFormId,
+		int checkInGraceMinutes,
+		int checkInWindowMinutesBefore,
+		boolean requireLocationForCheckIn,
 		EventStatus status,
 		UserSummary organizer,
 		List<UserSummary> taggedContributors,
@@ -20,5 +29,6 @@ public record EventResponse(
 		List<CrewApplicationResponse> crewApplications,
 		CrewApplicationResponse myCrewApplication,
 		boolean tagged,
+		boolean hasApplied,
 		Instant createdAt) {
 }
